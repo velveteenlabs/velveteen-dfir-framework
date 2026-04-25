@@ -1,26 +1,72 @@
 # =========================================
 # Velveteen DFIR Framework
-# Quick Triage
+# Simple Triage (Auto Collect Mode)
 # =========================================
 
-Write-Host "=== Velveteen Quick Triage ===" -ForegroundColor Cyan
+$BaseDir = "$env:USERPROFILE\Desktop\Velveteen-Cases"
+New-Item -ItemType Directory -Force -Path $BaseDir | Out-Null
 
-$Time = Get-Date
-$User = $env:USERNAME
-$HostName = $env:COMPUTERNAME
+$CaseName = Read-Host "Enter case name"
+$CasePath = Join-Path $BaseDir $CaseName
+$CandidatesDir = Join-Path $CasePath "Evidence-Candidates"
 
-Write-Host "`n[System Info]"
-Write-Host "Time: $Time"
-Write-Host "User: $User"
-Write-Host "Host: $HostName"
+New-Item -ItemType Directory -Force -Path $CasePath | Out-Null
+New-Item -ItemType Directory -Force -Path $CandidatesDir | Out-Null
 
-Write-Host "`n[Running Processes]"
-Get-Process | Sort-Object CPU -Descending | Select-Object -First 10
+$IndexFile = Join-Path $CasePath "candidate-index.csv"
 
-Write-Host "`n[Network Connections]"
-Get-NetTCPConnection | Where-Object { $_.State -eq "Established" } | Select-Object -First 10
+Write-Host "`nCollecting triage artifacts..." -ForegroundColor Cyan
 
-Write-Host "`n[Startup Items]"
-Get-CimInstance Win32_StartupCommand | Select-Object Name, Command
+$SearchPaths = @(
+    "$env:USERPROFILE\AppData\Local\Temp",
+    "$env:USERPROFILE\AppData\Roaming",
+    "$env:USERPROFILE\Downloads",
+    "$env:ProgramData"
+)
 
-Write-Host "`nTriage complete."
+$Extensions = @("*.exe", "*.dll", "*.ps1", "*.bat", "*.cmd", "*.vbs", "*.js", "*.lnk")
+
+$Collected = @()
+
+foreach ($Path in $SearchPaths) {
+    if (Test-Path $Path) {
+        foreach ($Ext in $Extensions) {
+            $Files = Get-ChildItem -Path $Path -Filter $Ext -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.LastWriteTime -gt (Get-Date).AddDays(-14) }
+
+            foreach ($File in $Files) {
+                try {
+                    $Dest = Join-Path $CandidatesDir $File.Name
+                    Copy-Item $File.FullName $Dest -Force
+
+                    $Hash = Get-FileHash $Dest -Algorithm SHA256
+
+                    $Collected += [PSCustomObject]@{
+                        FileName = $File.Name
+                        OriginalPath = $File.FullName
+                        StoredPath = $Dest
+                        Size = $File.Length
+                        LastModified = $File.LastWriteTime
+                        SHA256 = $Hash.Hash
+                    }
+
+                    Write-Host "Collected: $($File.Name)"
+                }
+                catch {
+                    # skip errors silently
+                }
+            }
+        }
+    }
+}
+
+if ($Collected.Count -eq 0) {
+    Write-Host "`nNo recent artifacts found." -ForegroundColor Yellow
+}
+else {
+    $Collected | Export-Csv $IndexFile -NoTypeInformation
+    Write-Host "`nSaved index: $IndexFile" -ForegroundColor Green
+}
+
+Write-Host "`nOpening case folder..." -ForegroundColor Green
+Start-Process explorer.exe $CasePath
