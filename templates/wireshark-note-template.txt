@@ -1,0 +1,10 @@
+﻿WIRESHARK NOTE TEMPLATE
+
+Capture Name:
+Date:
+Interface:
+Filter Used:
+Observed IPs:
+Observed Domains:
+Protocol Notes:
+Analyst Notes:

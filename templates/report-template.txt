@@ -1,0 +1,16 @@
+﻿REPORT TEMPLATE
+
+Title:
+Case ID:
+Analyst:
+Date:
+
+Summary:
+
+Findings:
+
+Evidence:
+
+Next Steps:
+
+Chain of Custody Notes:
